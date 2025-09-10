@@ -1,14 +1,17 @@
 FROM node:18-alpine
 
+# Set working directory
 WORKDIR /app
-COPY package.json package-lock.json* ./
-RUN npm install --production
 
+# Copy package.json and install dependencies
+COPY package*.json ./
+RUN npm install --only=production
+
+# Copy app source
 COPY . .
 
-# Create movies dir and ensure it exists
-RUN mkdir -p /app/movies
-
-# Expose port 80 (server.js uses 80 by default)
+# Expose port
 EXPOSE 80
+
+# Start the app
 CMD ["node", "server.js"]
