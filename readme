@@ -1,0 +1,16 @@
+andhrawala/
+├── Dockerfile
+├── Jenkinsfile
+├── k8s/
+│   ├── deployment.yml
+│   └── service.yml
+├── package.json
+├── server.js
+├── users.json            # created automatically; initial empty: []
+├── public/
+│   ├── index.html
+│   ├── login.html
+│   ├── signup.html
+│   └── style.css
+└── movies/               # put MP4 files here (not committed to repo)
+    └── sample-movie.mp4
