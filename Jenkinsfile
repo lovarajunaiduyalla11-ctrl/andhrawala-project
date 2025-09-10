@@ -10,7 +10,7 @@ pipeline {
     stage('Archive HTML') {
       steps {
         // Keeps a copy of the site as a Jenkins artifact
-        archiveArtifacts artifacts: 'index.html', fingerprint: true
+        archiveArtifacts artifacts: 'public/index.html', fingerprint: true
       }
     }
 
