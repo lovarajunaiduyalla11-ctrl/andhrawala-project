@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: andhrawala
+  labels:
+    app: andhrawala
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: andhrawala
+  template:
+    metadata:
+      labels:
+        app: andhrawala
+    spec:
+      containers:
+      - name: andhrawala
+        image: <DOCKER_HUB_USERNAME>/andhrawala:latest
+        ports:
+        - containerPort: 80
+        # If you want large file streaming adjust resources and securityContext as needed
