@@ -14,3 +14,28 @@ andhrawala/
 │   └── style.css
 └── movies/               # put MP4 files here (not committed to repo)
     └── sample-movie.mp4
+
+V2
+
+andhrawala/
+├── Dockerfile
+├── Jenkinsfile
+├── k8s/
+│   ├── deployment.yml
+│   └── service.yml
+├── package.json
+├── server.js               # Main backend logic and API routes
+├── users.json              # Data storage for users (JSON file)
+├── public/                 # Frontend static files
+│   ├── index.html
+│   ├── login.html          # Updated login form to accept email/mobile + password
+│   ├── signup.html         # Updated multi-step signup form with OTP verification
+│   ├── style.css
+│   └── (other static assets like scripts, images if needed)
+├── movies/                 # Store uploaded MP4 files here (not in repo)
+│   └── sample-movie.mp4
+└── utils/                  # (New) Utility helper functions (optional)
+    ├── emailSender.js      # (Optional) Separate email sending logic (nodemailer)
+    ├── otpManager.js       # (Optional) In-memory OTP handling if modularized
+    └── validation.js       # (Optional) Validation functions (email, mobile)
+
