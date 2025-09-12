@@ -2,17 +2,17 @@ FROM node:18-alpine
 
 WORKDIR /app
 
-# Copy package files to container
+# Copy package files first (better layer caching)
 COPY package*.json ./
 
-# Install dependencies inside container
-RUN npm install
+# Install only production dependencies
+RUN npm install --production
 
-# Copy app source code to container
+# Copy rest of the source code
 COPY . .
 
-# Expose the port your app listens on
-EXPOSE 80
+# Expose port (match with your server.js)
+EXPOSE 7070
 
 # Start the app
 CMD ["node", "server.js"]
