@@ -6,6 +6,8 @@ const bodyParser = require('body-parser');
 const crypto = require('crypto');
 const nodemailer = require('nodemailer');
 const validator = require('validator');
+require('dotenv').config(); // <-- Load .env variables
+
 const app = express();
 
 const DATA_USERS = path.join(__dirname, 'users.json');
@@ -37,7 +39,10 @@ const otps = new Map();
 // Email transporter setup
 const transporter = nodemailer.createTransport({
   service: 'Gmail',
-  auth: { user: process.env.EMAIL_USER || 'YOUR_EMAIL', pass: process.env.EMAIL_PASS || 'YOUR_PASSWORD_OR_APP_PASSWORD' }
+  auth: {
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS
+  }
 });
 
 // Send OTP
@@ -128,4 +133,5 @@ app.get('/movies/:filename', authMiddleware, (req, res) => {
   res.sendFile(filePath);
 });
 
+// Start server
 app.listen(PORT, '0.0.0.0', () => console.log(`Andhrawala server running on :${PORT}`));
