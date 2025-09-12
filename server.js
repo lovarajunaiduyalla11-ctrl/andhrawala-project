@@ -10,7 +10,7 @@ const app = express();
 
 const DATA_USERS = path.join(__dirname, 'users.json');
 const MOVIES_DIR = path.join(__dirname, 'movies');
-const PORT = process.env.PORT || 80;
+const PORT = process.env.PORT || 7070;
 
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
@@ -37,7 +37,7 @@ const otps = new Map();
 // Email transporter setup
 const transporter = nodemailer.createTransport({
   service: 'Gmail',
-  auth: { user: 'YOUR_EMAIL', pass: 'YOUR_PASSWORD_OR_APP_PASSWORD' }
+  auth: { user: process.env.EMAIL_USER || 'YOUR_EMAIL', pass: process.env.EMAIL_PASS || 'YOUR_PASSWORD_OR_APP_PASSWORD' }
 });
 
 // Send OTP
