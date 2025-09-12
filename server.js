@@ -1,12 +1,13 @@
-// server.js
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const bcrypt = require('bcrypt');
 const bodyParser = require('body-parser');
 const crypto = require('crypto');
-
+const nodemailer = require('nodemailer');
+const validator = require('validator');
 const app = express();
+
 const DATA_USERS = path.join(__dirname, 'users.json');
 const MOVIES_DIR = path.join(__dirname, 'movies');
 const PORT = process.env.PORT || 80;
@@ -27,88 +28,95 @@ function writeUsers(users) {
   fs.writeFileSync(DATA_USERS, JSON.stringify(users, null, 2));
 }
 
-// Simple in-memory sessions (demo). Use DB or JWT for production.
+// Simple in-memory session and OTP storage
 const sessions = new Map();
+const otps = new Map();
 
-app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
-
-// Signup
-app.post('/api/signup', async (req, res) => {
-  const { username, password } = req.body;
-  if (!username || !password) return res.status(400).json({ error: 'username & password required' });
-  const users = readUsers();
-  if (users.find(u => u.username === username)) return res.status(400).json({ error: 'user exists' });
-  const hash = await bcrypt.hash(password, 10);
-  users.push({ username, passwordHash: hash });
-  writeUsers(users);
-  return res.json({ ok: true });
-});
-
-// Login
-app.post('/api/login', async (req, res) => {
-  const { username, password } = req.body;
-  const users = readUsers();
-  const user = users.find(u => u.username === username);
-  if (!user) return res.status(401).json({ error: 'invalid' });
-  const match = await bcrypt.compare(password, user.passwordHash);
-  if (!match) return res.status(401).json({ error: 'invalid' });
-  const token = crypto.randomBytes(24).toString('hex');
-  sessions.set(token, { username, created: Date.now() });
-  res.json({ token });
-});
-
-// middleware: check auth token header 'x-auth-token'
-function requireAuth(req, res, next) {
-  const token = req.headers['x-auth-token'] || req.query.token;
-  if (!token || !sessions.has(token)) return res.status(401).json({ error: 'unauthorized' });
-  req.user = sessions.get(token);
-  next();
-}
-
-// List movies
-app.get('/api/movies', requireAuth, (req, res) => {
-  const files = fs.existsSync(MOVIES_DIR) ? fs.readdirSync(MOVIES_DIR) : [];
-  const movies = files.filter(f => /\.(mp4|mkv|webm)$/i.test(f)).map(f => ({ name: f, url: `/video/${encodeURIComponent(f)}` }));
-  res.json({ movies });
-});
-
-// Stream endpoint supporting Range header
-app.get('/video/:name', requireAuth, (req, res) => {
-  const name = req.params.name;
-  const filePath = path.join(MOVIES_DIR, name);
-  if (!fs.existsSync(filePath)) return res.status(404).send('Not found');
-
-  const stat = fs.statSync(filePath);
-  const total = stat.size;
-  const range = req.headers.range;
-  if (range) {
-    const parts = range.replace(/bytes=/, '').split('-');
-    const start = parseInt(parts[0], 10);
-    const end = parts[1] ? parseInt(parts[1], 10) : total - 1;
-    if (start >= total || end >= total) {
-      res.status(416).send('Requested range not satisfiable\n' + start + ' >= ' + total);
-      return;
-    }
-    res.writeHead(206, {
-      'Content-Range': `bytes ${start}-${end}/${total}`,
-      'Accept-Ranges': 'bytes',
-      'Content-Length': (end - start) + 1,
-      'Content-Type': 'video/mp4'
-    });
-    const stream = fs.createReadStream(filePath, { start, end });
-    stream.pipe(res);
-  } else {
-    res.writeHead(200, {
-      'Content-Length': total,
-      'Content-Type': 'video/mp4'
-    });
-    fs.createReadStream(filePath).pipe(res);
+// Email transporter setup - replace YOUR_EMAIL and YOUR_PASSWORD_OR_APP_PASSWORD
+const transporter = nodemailer.createTransport({
+  service: 'Gmail',
+  auth: {
+    user: 'YOUR_EMAIL',
+    pass: 'YOUR_PASSWORD_OR_APP_PASSWORD'
   }
 });
 
-// Static pages: signup/login use /static pages
-app.use('/app', express.static(path.join(__dirname, 'public')));
+// API: Send OTP
+app.post('/api/send-otp', async (req, res) => {
+  const { contact } = req.body;
+  let contactType = null;
+  if (validator.isEmail(contact)) contactType = 'email';
+  else if (/^[6-9]\d{9}$/.test(contact)) contactType = 'mobile';
+  else return res.status(400).json({ error: "Invalid email or Indian mobile number" });
+
+  const otp = Math.floor(100000 + Math.random() * 900000).toString();
+  otps.set(contact, { otp, expires: Date.now() + 5 * 60 * 1000 });
+
+  try {
+    if (contactType === 'email') {
+      await transporter.sendMail({
+        to: contact,
+        subject: 'Your Andhrawala OTP',
+        text: `Your OTP is: ${otp}`
+      });
+    } else {
+      // TODO: Integrate real SMS service here. For now log OTP to console.
+      console.log(`Send OTP ${otp} to mobile ${contact}`);
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to send OTP" });
+  }
+});
+
+// API: Verify OTP
+app.post('/api/verify-otp', (req, res) => {
+  const { contact, otp } = req.body;
+  const otpData = otps.get(contact);
+  if (!otpData) return res.status(400).json({ error: "No OTP sent to this contact" });
+  if (otpData.otp !== otp) return res.status(400).json({ error: "Invalid OTP" });
+  if (Date.now() > otpData.expires) return res.status(400).json({ error: "OTP expired" });
+  otps.delete(contact);
+  res.json({ ok: true });
+});
+
+// API: Signup
+app.post('/api/signup', async (req, res) => {
+  const { contact, username, password, dob } = req.body;
+  let contactType;
+  if (validator.isEmail(contact)) contactType = "email";
+  else if (/^[6-9]\d{9}$/.test(contact)) contactType = "mobile";
+  else return res.status(400).json({ error: "Invalid email or Indian mobile number" });
+
+  if (!username || !password || !dob) return res.status(400).json({ error: "All fields are required" });
+
+  const users = readUsers();
+  if (users.find(u => u.contact === contact)) return res.status(400).json({ error: "Contact already registered" });
+  if (users.find(u => u.username === username)) return res.status(400).json({ error: "Username already taken" });
+
+  const passwordHash = await bcrypt.hash(password, 10);
+  users.push({ contact, contactType, username, passwordHash, dob });
+  writeUsers(users);
+
+  res.json({ ok: true });
+});
+
+// API: Login
+app.post('/api/login', async (req, res) => {
+  const { contact, password } = req.body;
+  const users = readUsers();
+  const user = users.find(u => u.contact === contact);
+  if (!user) return res.status(401).json({ error: 'Invalid credentials' });
+
+  const match = await bcrypt.compare(password, user.passwordHash);
+  if (!match) return res.status(401).json({ error: 'Invalid credentials' });
+
+  const token = crypto.randomBytes(24).toString('hex');
+  sessions.set(token, { contact, username: user.username, created: Date.now() });
+  res.json({ token });
+});
+
+// Keep your existing movie streaming and static file serving API below here...
 
 app.listen(PORT, () => console.log(`andhrawala server running on :${PORT}`));
+
