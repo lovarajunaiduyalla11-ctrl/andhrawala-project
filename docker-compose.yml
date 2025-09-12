@@ -11,6 +11,8 @@ services:
       MYSQL_PASSWORD: mypassword
     volumes:
       - db_data:/var/lib/mysql
+    ports:
+      - "3306:3306"
 
   app:
     build: .
@@ -22,8 +24,8 @@ services:
       DB_USER: myuser
       DB_PASSWORD: mypassword
       DB_NAME: mydb
-      EMAIL_USER: youremail@gmail.com
-      EMAIL_PASS: your-app-password
+      EMAIL_USER: andhraw46@gmail.com        # Replace with your Gmail
+      EMAIL_PASS: andhrawala4641          # Use Gmail app password if 2FA enabled
     ports:
       - "7070:7070"
     depends_on:
