@@ -6,43 +6,25 @@ const bodyParser = require('body-parser');
 const crypto = require('crypto');
 const nodemailer = require('nodemailer');
 const validator = require('validator');
-const mysql = require('mysql2');
 
 const app = express();
-const PORT = process.env.PORT || 7070;
+
 const DATA_USERS = path.join(__dirname, 'users.json');
 const MOVIES_DIR = path.join(__dirname, 'movies');
+const PORT = process.env.PORT || 7070;
 
-// MySQL connection
-const db = mysql.createPool({
-  host: process.env.DB_HOST || 'localhost',
-  user: process.env.DB_USER || 'myuser',
-  password: process.env.DB_PASSWORD || 'mypassword',
-  database: process.env.DB_NAME || 'mydb',
-  waitForConnections: true,
-  connectionLimit: 10
-});
-
-// Ensure users.json exists
-if (!fs.existsSync(DATA_USERS)) fs.writeFileSync(DATA_USERS, JSON.stringify([]));
-if (!fs.existsSync(MOVIES_DIR)) fs.mkdirSync(MOVIES_DIR);
+// Email credentials from environment variables
+const EMAIL_USER = process.env.EMAIL_USER || 'your_email@gmail.com';
+const EMAIL_PASS = process.env.EMAIL_PASS || 'your_email_password';
 
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
 app.use('/static', express.static(path.join(__dirname, 'public')));
 
-// Sessions & OTPs
-const sessions = new Map();
-const otps = new Map();
-
-// Nodemailer setup
-const transporter = nodemailer.createTransport({
-  service: 'Gmail',
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS
-  }
-});
+// Ensure users.json exists
+if (!fs.existsSync(DATA_USERS)) fs.writeFileSync(DATA_USERS, JSON.stringify([]));
+// Ensure movies folder exists
+if (!fs.existsSync(MOVIES_DIR)) fs.mkdirSync(MOVIES_DIR);
 
 // Utility: read/write users
 function readUsers() {
@@ -52,6 +34,21 @@ function readUsers() {
 function writeUsers(users) {
   fs.writeFileSync(DATA_USERS, JSON.stringify(users, null, 2));
 }
+
+// In-memory sessions & OTPs
+const sessions = new Map();
+const otps = new Map();
+
+// Email transporter setup
+const transporter = nodemailer.createTransport({
+  service: 'Gmail',
+  auth: { user: EMAIL_USER, pass: EMAIL_PASS }
+});
+
+// Serve homepage
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
 
 // Send OTP
 app.post('/api/send-otp', async (req, res) => {
@@ -89,14 +86,16 @@ app.post('/api/verify-otp', (req, res) => {
 // Signup
 app.post('/api/signup', async (req, res) => {
   const { contact, username, password, dob } = req.body;
-  if (!contact || !username || !password || !dob) return res.status(400).json({ error: "All fields required" });
+  let contactType = validator.isEmail(contact) ? "email" : (/^[6-9]\d{9}$/.test(contact) ? "mobile" : null);
+  if (!contactType) return res.status(400).json({ error: "Invalid email or Indian mobile number" });
+  if (!username || !password || !dob) return res.status(400).json({ error: "All fields required" });
 
   const users = readUsers();
   if (users.find(u => u.contact === contact)) return res.status(400).json({ error: "Contact already registered" });
   if (users.find(u => u.username === username)) return res.status(400).json({ error: "Username taken" });
 
   const passwordHash = await bcrypt.hash(password, 10);
-  users.push({ contact, username, passwordHash, dob });
+  users.push({ contact, contactType, username, passwordHash, dob });
   writeUsers(users);
 
   res.json({ ok: true });
@@ -117,7 +116,7 @@ app.post('/api/login', async (req, res) => {
   res.json({ token });
 });
 
-// Auth middleware
+// Middleware to verify token
 function authMiddleware(req, res, next) {
   const token = req.query.token || req.headers['authorization'];
   if (!token || !sessions.has(token)) return res.status(401).json({ error: "Unauthorized" });
@@ -132,11 +131,12 @@ app.get('/api/movies', authMiddleware, (req, res) => {
   res.json({ movies });
 });
 
-// Serve movies
+// Serve movies securely
 app.get('/movies/:filename', authMiddleware, (req, res) => {
   const filePath = path.join(MOVIES_DIR, req.params.filename);
   if (!fs.existsSync(filePath)) return res.status(404).send("Not found");
   res.sendFile(filePath);
 });
 
-app.listen(PORT, '0.0.0.0', () => console.log(`Server running on port ${PORT}`));
+// Start server
+app.listen(PORT, '0.0.0.0', () => console.log(`Andhrawala server running on :${PORT}`));
