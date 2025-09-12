@@ -17,28 +17,21 @@ const PORT = process.env.PORT || 7070;
 const EMAIL_USER = process.env.EMAIL_USER;
 const EMAIL_PASS = process.env.EMAIL_PASS;
 
-// --- Ensure email credentials exist ---
-if (!EMAIL_USER || !EMAIL_PASS) {
-  console.error("ERROR: EMAIL_USER or EMAIL_PASS environment variables not set!");
-  process.exit(1);
-}
-
-// Nodemailer transporter
-const transporter = nodemailer.createTransport({
-  service: 'Gmail',
-  auth: { user: EMAIL_USER, pass: EMAIL_PASS }
-});
-
-// --- Middlewares ---
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
 app.use('/static', express.static(path.join(__dirname, 'public')));
 
-// --- Ensure data files/folders exist ---
+// Serve homepage
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+// Ensure users.json exists
 if (!fs.existsSync(DATA_USERS)) fs.writeFileSync(DATA_USERS, JSON.stringify([]));
+// Ensure movies folder exists
 if (!fs.existsSync(MOVIES_DIR)) fs.mkdirSync(MOVIES_DIR);
 
-// --- Utility functions ---
+// Utility: read/write users
 function readUsers() {
   try { return JSON.parse(fs.readFileSync(DATA_USERS)); }
   catch (e) { return []; }
@@ -47,11 +40,34 @@ function writeUsers(users) {
   fs.writeFileSync(DATA_USERS, JSON.stringify(users, null, 2));
 }
 
-// --- In-memory storage ---
+// In-memory sessions & OTPs
 const sessions = new Map();
 const otps = new Map();
 
-// --- Routes ---
+// Nodemailer transporter
+let transporter;
+
+async function initTransporter() {
+  if (EMAIL_USER && EMAIL_PASS) {
+    transporter = nodemailer.createTransport({
+      service: 'Gmail',
+      auth: { user: EMAIL_USER, pass: EMAIL_PASS }
+    });
+    console.log('Using Gmail for OTPs');
+  } else {
+    const account = await nodemailer.createTestAccount();
+    transporter = nodemailer.createTransport({
+      host: account.smtp.host,
+      port: account.smtp.port,
+      secure: account.smtp.secure,
+      auth: { user: account.user, pass: account.pass }
+    });
+    console.log('Using Ethereal test email:', account.user);
+  }
+}
+
+// Initialize transporter
+initTransporter().catch(err => console.error('Email transporter error:', err));
 
 // Send OTP
 app.post('/api/send-otp', async (req, res) => {
@@ -67,12 +83,16 @@ app.post('/api/send-otp', async (req, res) => {
 
   try {
     if (contactType === 'email') {
+      if (!transporter) return res.status(500).json({ error: "Email transporter not ready" });
       const info = await transporter.sendMail({
         to: contact,
         subject: 'Andhrawala OTP',
         text: `Your OTP is: ${otp}`
       });
-      console.log(`OTP sent to ${contact} | messageId: ${info.messageId}`);
+      console.log('OTP sent:', info.messageId);
+      if (nodemailer.getTestMessageUrl(info)) {
+        console.log('Preview URL:', nodemailer.getTestMessageUrl(info));
+      }
     } else {
       console.log(`Send OTP ${otp} to mobile ${contact}`);
     }
@@ -130,7 +150,7 @@ app.post('/api/login', async (req, res) => {
   res.json({ token });
 });
 
-// Auth middleware
+// Middleware to verify token
 function authMiddleware(req, res, next) {
   const token = req.query.token || req.headers['authorization'];
   if (!token || !sessions.has(token)) return res.status(401).json({ error: "Unauthorized" });
