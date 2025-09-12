@@ -13,9 +13,9 @@ const DATA_USERS = path.join(__dirname, 'users.json');
 const MOVIES_DIR = path.join(__dirname, 'movies');
 const PORT = process.env.PORT || 7070;
 
-// Email credentials from environment variables
-const EMAIL_USER = process.env.EMAIL_USER || 'your_email@gmail.com';
-const EMAIL_PASS = process.env.EMAIL_PASS || 'your_email_password';
+// Environment variables for email
+const EMAIL_USER = process.env.EMAIL_USER;
+const EMAIL_PASS = process.env.EMAIL_PASS;
 
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
@@ -39,21 +39,34 @@ function writeUsers(users) {
 const sessions = new Map();
 const otps = new Map();
 
-// Email transporter setup
-const transporter = nodemailer.createTransport({
-  service: 'Gmail',
-  auth: { user: EMAIL_USER, pass: EMAIL_PASS }
-});
+// Nodemailer transporter
+let transporter;
 
-// Serve homepage
-app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
+if (EMAIL_USER && EMAIL_PASS) {
+  transporter = nodemailer.createTransport({
+    service: 'Gmail',
+    auth: { user: EMAIL_USER, pass: EMAIL_PASS }
+  });
+} else {
+  // Fallback: Ethereal (for dev/testing)
+  nodemailer.createTestAccount().then(account => {
+    transporter = nodemailer.createTransport({
+      host: account.smtp.host,
+      port: account.smtp.port,
+      secure: account.smtp.secure,
+      auth: { user: account.user, pass: account.pass }
+    });
+    console.log('Using Ethereal test email:', account.user);
+  }).catch(err => console.error('Failed to create Ethereal account', err));
+}
 
 // Send OTP
 app.post('/api/send-otp', async (req, res) => {
   const { contact } = req.body;
-  let contactType = validator.isEmail(contact) ? 'email' : (/^[6-9]\d{9}$/.test(contact) ? 'mobile' : null);
+  const contactType = validator.isEmail(contact)
+    ? 'email'
+    : (/^[6-9]\d{9}$/.test(contact) ? 'mobile' : null);
+
   if (!contactType) return res.status(400).json({ error: "Invalid email or Indian mobile number" });
 
   const otp = Math.floor(100000 + Math.random() * 900000).toString();
@@ -61,7 +74,16 @@ app.post('/api/send-otp', async (req, res) => {
 
   try {
     if (contactType === 'email') {
-      await transporter.sendMail({ to: contact, subject: 'Andhrawala OTP', text: `Your OTP is: ${otp}` });
+      if (!transporter) return res.status(500).json({ error: "Email transporter not ready" });
+      const info = await transporter.sendMail({
+        to: contact,
+        subject: 'Andhrawala OTP',
+        text: `Your OTP is: ${otp}`
+      });
+      console.log('OTP sent:', info.messageId);
+      if (nodemailer.getTestMessageUrl(info)) {
+        console.log('Preview URL:', nodemailer.getTestMessageUrl(info));
+      }
     } else {
       console.log(`Send OTP ${otp} to mobile ${contact}`);
     }
@@ -86,7 +108,10 @@ app.post('/api/verify-otp', (req, res) => {
 // Signup
 app.post('/api/signup', async (req, res) => {
   const { contact, username, password, dob } = req.body;
-  let contactType = validator.isEmail(contact) ? "email" : (/^[6-9]\d{9}$/.test(contact) ? "mobile" : null);
+  const contactType = validator.isEmail(contact)
+    ? "email"
+    : (/^[6-9]\d{9}$/.test(contact) ? "mobile" : null);
+
   if (!contactType) return res.status(400).json({ error: "Invalid email or Indian mobile number" });
   if (!username || !password || !dob) return res.status(400).json({ error: "All fields required" });
 
