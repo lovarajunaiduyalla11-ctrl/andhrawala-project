@@ -17,16 +17,28 @@ const PORT = process.env.PORT || 7070;
 const EMAIL_USER = process.env.EMAIL_USER;
 const EMAIL_PASS = process.env.EMAIL_PASS;
 
+// --- Ensure email credentials exist ---
+if (!EMAIL_USER || !EMAIL_PASS) {
+  console.error("ERROR: EMAIL_USER or EMAIL_PASS environment variables not set!");
+  process.exit(1);
+}
+
+// Nodemailer transporter
+const transporter = nodemailer.createTransport({
+  service: 'Gmail',
+  auth: { user: EMAIL_USER, pass: EMAIL_PASS }
+});
+
+// --- Middlewares ---
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
 app.use('/static', express.static(path.join(__dirname, 'public')));
 
-// Ensure users.json exists
+// --- Ensure data files/folders exist ---
 if (!fs.existsSync(DATA_USERS)) fs.writeFileSync(DATA_USERS, JSON.stringify([]));
-// Ensure movies folder exists
 if (!fs.existsSync(MOVIES_DIR)) fs.mkdirSync(MOVIES_DIR);
 
-// Utility: read/write users
+// --- Utility functions ---
 function readUsers() {
   try { return JSON.parse(fs.readFileSync(DATA_USERS)); }
   catch (e) { return []; }
@@ -35,24 +47,11 @@ function writeUsers(users) {
   fs.writeFileSync(DATA_USERS, JSON.stringify(users, null, 2));
 }
 
-// In-memory sessions & OTPs
+// --- In-memory storage ---
 const sessions = new Map();
 const otps = new Map();
 
-// Nodemailer transporter
-let transporter;
-
-if (EMAIL_USER && EMAIL_PASS) {
-  transporter = nodemailer.createTransport({
-    host: 'smtp.gmail.com',
-    port: 465,
-    secure: true,
-    auth: { user: EMAIL_USER, pass: EMAIL_PASS }
-  });
-  console.log('Gmail transporter ready');
-} else {
-  console.error('EMAIL_USER and EMAIL_PASS must be set in environment variables');
-}
+// --- Routes ---
 
 // Send OTP
 app.post('/api/send-otp', async (req, res) => {
@@ -68,20 +67,18 @@ app.post('/api/send-otp', async (req, res) => {
 
   try {
     if (contactType === 'email') {
-      if (!transporter) return res.status(500).json({ error: "Email transporter not ready" });
       const info = await transporter.sendMail({
-        from: `"Andhrawala" <${EMAIL_USER}>`,
         to: contact,
-        subject: 'Your OTP for Andhrawala',
-        text: `Your OTP is: ${otp}\nThis OTP is valid for 5 minutes.`
+        subject: 'Andhrawala OTP',
+        text: `Your OTP is: ${otp}`
       });
-      console.log(`OTP sent to ${contact}: ${otp}`);
+      console.log(`OTP sent to ${contact} | messageId: ${info.messageId}`);
     } else {
       console.log(`Send OTP ${otp} to mobile ${contact}`);
     }
     res.json({ ok: true });
   } catch (err) {
-    console.error('Error sending OTP:', err);
+    console.error(err);
     res.status(500).json({ error: "Failed to send OTP" });
   }
 });
@@ -133,7 +130,7 @@ app.post('/api/login', async (req, res) => {
   res.json({ token });
 });
 
-// Middleware to verify token
+// Auth middleware
 function authMiddleware(req, res, next) {
   const token = req.query.token || req.headers['authorization'];
   if (!token || !sessions.has(token)) return res.status(401).json({ error: "Unauthorized" });
