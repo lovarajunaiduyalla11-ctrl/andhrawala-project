@@ -1,36 +1,30 @@
-version: '3.9'
+version: "3.8"
 
 services:
-  app:
-    image: lova1254/andhrawala:latest   # Your Node.js image
-    container_name: andhrawala-app
-    restart: always
-    ports:
-      - "7070:80"                        # Expose Node.js on 7070
-    environment:
-      DB_HOST: db
-      DB_USER: myuser
-      DB_PASSWORD: mypass
-      DB_NAME: mydb
-    depends_on:
-      - db
-    volumes:
-      - ./movies:/app/movies             # Map movies folder
-      - ./users.json:/app/users.json     # Map users.json if exists
-
   db:
     image: mysql:5.7
-    container_name: andhrawala-db
     restart: always
     environment:
-      MYSQL_ROOT_PASSWORD: rootpass
+      MYSQL_ROOT_PASSWORD: rootpassword
       MYSQL_DATABASE: mydb
       MYSQL_USER: myuser
-      MYSQL_PASSWORD: mypass
+      MYSQL_PASSWORD: mypassword
     ports:
       - "3306:3306"
     volumes:
-      - db_data:/var/lib/mysql           # Persistent DB storage
+      - db_data:/var/lib/mysql
+
+  app:
+    build: .
+    restart: always
+    environment:
+      PORT: 7070
+      EMAIL_USER: youremail@gmail.com
+      EMAIL_PASS: your-email-or-app-password
+    ports:
+      - "7070:7070"
+    depends_on:
+      - db
 
 volumes:
   db_data:
