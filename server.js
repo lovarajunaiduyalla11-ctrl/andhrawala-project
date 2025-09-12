@@ -44,20 +44,14 @@ let transporter;
 
 if (EMAIL_USER && EMAIL_PASS) {
   transporter = nodemailer.createTransport({
-    service: 'Gmail',
+    host: 'smtp.gmail.com',
+    port: 465,
+    secure: true,
     auth: { user: EMAIL_USER, pass: EMAIL_PASS }
   });
+  console.log('Gmail transporter ready');
 } else {
-  // Fallback: Ethereal (for dev/testing)
-  nodemailer.createTestAccount().then(account => {
-    transporter = nodemailer.createTransport({
-      host: account.smtp.host,
-      port: account.smtp.port,
-      secure: account.smtp.secure,
-      auth: { user: account.user, pass: account.pass }
-    });
-    console.log('Using Ethereal test email:', account.user);
-  }).catch(err => console.error('Failed to create Ethereal account', err));
+  console.error('EMAIL_USER and EMAIL_PASS must be set in environment variables');
 }
 
 // Send OTP
@@ -76,20 +70,18 @@ app.post('/api/send-otp', async (req, res) => {
     if (contactType === 'email') {
       if (!transporter) return res.status(500).json({ error: "Email transporter not ready" });
       const info = await transporter.sendMail({
+        from: `"Andhrawala" <${EMAIL_USER}>`,
         to: contact,
-        subject: 'Andhrawala OTP',
-        text: `Your OTP is: ${otp}`
+        subject: 'Your OTP for Andhrawala',
+        text: `Your OTP is: ${otp}\nThis OTP is valid for 5 minutes.`
       });
-      console.log('OTP sent:', info.messageId);
-      if (nodemailer.getTestMessageUrl(info)) {
-        console.log('Preview URL:', nodemailer.getTestMessageUrl(info));
-      }
+      console.log(`OTP sent to ${contact}: ${otp}`);
     } else {
       console.log(`Send OTP ${otp} to mobile ${contact}`);
     }
     res.json({ ok: true });
   } catch (err) {
-    console.error(err);
+    console.error('Error sending OTP:', err);
     res.status(500).json({ error: "Failed to send OTP" });
   }
 });
