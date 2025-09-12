@@ -1,16 +1,17 @@
 FROM node:18-alpine
 
-# Set working directory
 WORKDIR /app
 
-# Copy package.json and install dependencies
+# Copy package files to container
 COPY package*.json ./
-RUN npm install --only=production
 
-# Copy app source
+# Install dependencies inside container
+RUN npm install
+
+# Copy app source code to container
 COPY . .
 
-# Expose port
+# Expose the port your app listens on
 EXPOSE 80
 
 # Start the app
