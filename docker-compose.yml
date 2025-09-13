@@ -9,8 +9,6 @@ services:
       MYSQL_DATABASE: mydb
       MYSQL_USER: myuser
       MYSQL_PASSWORD: mypassword
-    ports:
-      - "3306:3306"
     volumes:
       - db_data:/var/lib/mysql
 
@@ -19,17 +17,13 @@ services:
     restart: always
     environment:
       PORT: 7070
-
-      # MySQL config
       DB_HOST: db
       DB_PORT: 3306
       DB_USER: myuser
       DB_PASSWORD: mypassword
       DB_NAME: mydb
-
-      # Gmail SMTP for OTP
-      EMAIL_USER: youremail@gmail.com
-      EMAIL_PASS: your-app-password
+      EMAIL_USER: andhraw46@gmail.com   # <-- change this
+      EMAIL_PASS: fzyaqqomxygulzju     # <-- paste Gmail App Password here
     ports:
       - "7070:7070"
     depends_on:
