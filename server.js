@@ -17,6 +17,11 @@ const PORT = process.env.PORT || 7070;
 const EMAIL_USER = process.env.EMAIL_USER;
 const EMAIL_PASS = process.env.EMAIL_PASS;
 
+if (!EMAIL_USER || !EMAIL_PASS) {
+  console.error("❌ EMAIL_USER and EMAIL_PASS must be set as environment variables!");
+  process.exit(1);
+}
+
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
 app.use('/static', express.static(path.join(__dirname, 'public')));
@@ -28,7 +33,6 @@ app.get('/', (req, res) => {
 
 // Ensure users.json exists
 if (!fs.existsSync(DATA_USERS)) fs.writeFileSync(DATA_USERS, JSON.stringify([]));
-// Ensure movies folder exists
 if (!fs.existsSync(MOVIES_DIR)) fs.mkdirSync(MOVIES_DIR);
 
 // Utility: read/write users
@@ -44,30 +48,12 @@ function writeUsers(users) {
 const sessions = new Map();
 const otps = new Map();
 
-// Nodemailer transporter
-let transporter;
-
-async function initTransporter() {
-  if (EMAIL_USER && EMAIL_PASS) {
-    transporter = nodemailer.createTransport({
-      service: 'Gmail',
-      auth: { user: EMAIL_USER, pass: EMAIL_PASS }
-    });
-    console.log('Using Gmail for OTPs');
-  } else {
-    const account = await nodemailer.createTestAccount();
-    transporter = nodemailer.createTransport({
-      host: account.smtp.host,
-      port: account.smtp.port,
-      secure: account.smtp.secure,
-      auth: { user: account.user, pass: account.pass }
-    });
-    console.log('Using Ethereal test email:', account.user);
-  }
-}
-
-// Initialize transporter
-initTransporter().catch(err => console.error('Email transporter error:', err));
+// Gmail transporter
+const transporter = nodemailer.createTransport({
+  service: 'Gmail',
+  auth: { user: EMAIL_USER, pass: EMAIL_PASS }
+});
+console.log('📧 Gmail transporter ready for:', EMAIL_USER);
 
 // Send OTP
 app.post('/api/send-otp', async (req, res) => {
@@ -83,22 +69,19 @@ app.post('/api/send-otp', async (req, res) => {
 
   try {
     if (contactType === 'email') {
-      if (!transporter) return res.status(500).json({ error: "Email transporter not ready" });
       const info = await transporter.sendMail({
+        from: EMAIL_USER,
         to: contact,
         subject: 'Andhrawala OTP',
         text: `Your OTP is: ${otp}`
       });
-      console.log('OTP sent:', info.messageId);
-      if (nodemailer.getTestMessageUrl(info)) {
-        console.log('Preview URL:', nodemailer.getTestMessageUrl(info));
-      }
+      console.log('✅ OTP sent to', contact, 'ID:', info.messageId);
     } else {
-      console.log(`Send OTP ${otp} to mobile ${contact}`);
+      console.log(`📱 Send OTP ${otp} to mobile ${contact} (not yet implemented)`);
     }
     res.json({ ok: true });
   } catch (err) {
-    console.error(err);
+    console.error("❌ Failed to send OTP:", err.message);
     res.status(500).json({ error: "Failed to send OTP" });
   }
 });
@@ -173,4 +156,4 @@ app.get('/movies/:filename', authMiddleware, (req, res) => {
 });
 
 // Start server
-app.listen(PORT, '0.0.0.0', () => console.log(`Andhrawala server running on :${PORT}`));
+app.listen(PORT, '0.0.0.0', () => console.log(`🚀 Andhrawala server running on :${PORT}`));
